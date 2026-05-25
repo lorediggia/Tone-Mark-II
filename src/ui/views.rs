@@ -8,6 +8,7 @@ use crate::midi::katana::{
     AMP_TYPES, AMP_TYPE_VALUES, BOOSTER_TYPES, BOOSTER_TYPE_VALUES,
     MOD_TYPES, MOD_TYPE_VALUES, FX_TYPES, FX_TYPE_VALUES,
     DELAY_TYPES, DELAY_TYPE_VALUES, REVERB_TYPES, REVERB_TYPE_VALUES,
+    MAIN_PARAMS, MOD_BASE_PAGE, FX_BASE_PAGE,
 };
 use crate::ui::theme::{col, PaletteId};
 use crate::ui::widgets::*;
@@ -28,10 +29,24 @@ pub trait AppViews {
     fn ui_tag_manager(&mut self, ui: &mut egui::Ui);
 }
 
-const PANEL_MIN_H: f32 = 168.0;
+const PANEL_H: f32 = 160.0;
 
-fn type_dependent_fill(ui: &mut egui::Ui, name: &str, on: bool) {
-    ui.add_space(20.0);
+fn panel<F: FnOnce(&mut egui::Ui)>(ui: &mut egui::Ui, body: F) {
+    egui::Frame::none()
+        .fill(col::CARD)
+        .stroke(Stroke::new(1.0, col::STROKE))
+        .rounding(Rounding::same(8.0))
+        .inner_margin(egui::Margin::same(14.0))
+        .show(ui, |ui| {
+            ui.set_min_height(PANEL_H);
+            let avail_w = ui.available_width();
+            ui.allocate_space(Vec2::new(avail_w, 0.0));
+            body(ui);
+            let used = ui.min_rect().height();
+            if used < PANEL_H {
+                ui.add_space(PANEL_H - used);
+            }
+        });
 }
 
 impl AppViews for ToneApp {
@@ -755,19 +770,6 @@ impl AppViews for ToneApp {
                             }
                         }
                     });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let mut b = self.amp.bright;
-                    if ui
-                        .checkbox(
-                            &mut b,
-                            RichText::new("BRIGHT").color(col::TEXT_DIM).size(11.0),
-                        )
-                        .changed()
-                    {
-                        self.amp.bright = b;
-                        self.send_param(ad::AMP_BRIGHT, b as u8);
-                    }
-                });
             });
             ui.add_space(10.0);
             ui.separator();
@@ -812,8 +814,7 @@ impl AppViews for ToneApp {
     }
 
     fn ui_booster_section(&mut self, ui: &mut egui::Ui) {
-        card(ui, |ui| {
-            ui.set_min_height(PANEL_MIN_H);
+        panel(ui, |ui| {
             let mut on = self.booster.on;
             if block_header(ui, "BOOSTER", &mut on) {
                 self.booster.on = on;
@@ -850,8 +851,7 @@ impl AppViews for ToneApp {
     }
 
     fn ui_mod_section(&mut self, ui: &mut egui::Ui) {
-        card(ui, |ui| {
-            ui.set_min_height(PANEL_MIN_H);
+        panel(ui, |ui| {
             let mut on = self.mod_fx.on;
             if block_header(ui, "MOD", &mut on) {
                 self.mod_fx.on = on;
@@ -863,15 +863,42 @@ impl AppViews for ToneApp {
                 self.mod_fx.type_idx = idx;
                 let raw = MOD_TYPE_VALUES.get(idx).copied().unwrap_or(0);
                 self.send_param(ad::MOD_TYPE, raw);
+                self.resend_mod_params();
             }
-            let name = MOD_TYPES.get(idx).copied().unwrap_or("—");
-            type_dependent_fill(ui, name, self.mod_fx.on);
+            ui.add_space(10.0);
+            let params = MAIN_PARAMS.get(idx).copied().unwrap_or([None; 4]);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 10.0;
+                if let Some(p) = &params[0] {
+                    if knob(ui, &mut self.mod_fx.p1, 0..=p.max, p.name).changed() {
+                        let v = self.mod_fx.p1;
+                        self.send_param([0x00, MOD_BASE_PAGE + p.page_offset, p.addr], v);
+                    }
+                }
+                if let Some(p) = &params[1] {
+                    if knob(ui, &mut self.mod_fx.p2, 0..=p.max, p.name).changed() {
+                        let v = self.mod_fx.p2;
+                        self.send_param([0x00, MOD_BASE_PAGE + p.page_offset, p.addr], v);
+                    }
+                }
+                if let Some(p) = &params[2] {
+                    if knob(ui, &mut self.mod_fx.p3, 0..=p.max, p.name).changed() {
+                        let v = self.mod_fx.p3;
+                        self.send_param([0x00, MOD_BASE_PAGE + p.page_offset, p.addr], v);
+                    }
+                }
+                if let Some(p) = &params[3] {
+                    if knob(ui, &mut self.mod_fx.p4, 0..=p.max, p.name).changed() {
+                        let v = self.mod_fx.p4;
+                        self.send_param([0x00, MOD_BASE_PAGE + p.page_offset, p.addr], v);
+                    }
+                }
+            });
         });
     }
 
     fn ui_fx_section(&mut self, ui: &mut egui::Ui) {
-        card(ui, |ui| {
-            ui.set_min_height(PANEL_MIN_H);
+        panel(ui, |ui| {
             let mut on = self.fx.on;
             if block_header(ui, "FX", &mut on) {
                 self.fx.on = on;
@@ -883,15 +910,42 @@ impl AppViews for ToneApp {
                 self.fx.type_idx = idx;
                 let raw = FX_TYPE_VALUES.get(idx).copied().unwrap_or(0);
                 self.send_param(ad::FX_TYPE, raw);
+                self.resend_fx_params();
             }
-            let name = FX_TYPES.get(idx).copied().unwrap_or("—");
-            type_dependent_fill(ui, name, self.fx.on);
+            ui.add_space(10.0);
+            let params = MAIN_PARAMS.get(idx).copied().unwrap_or([None; 4]);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 10.0;
+                if let Some(p) = &params[0] {
+                    if knob(ui, &mut self.fx.p1, 0..=p.max, p.name).changed() {
+                        let v = self.fx.p1;
+                        self.send_param([0x00, FX_BASE_PAGE + p.page_offset, p.addr], v);
+                    }
+                }
+                if let Some(p) = &params[1] {
+                    if knob(ui, &mut self.fx.p2, 0..=p.max, p.name).changed() {
+                        let v = self.fx.p2;
+                        self.send_param([0x00, FX_BASE_PAGE + p.page_offset, p.addr], v);
+                    }
+                }
+                if let Some(p) = &params[2] {
+                    if knob(ui, &mut self.fx.p3, 0..=p.max, p.name).changed() {
+                        let v = self.fx.p3;
+                        self.send_param([0x00, FX_BASE_PAGE + p.page_offset, p.addr], v);
+                    }
+                }
+                if let Some(p) = &params[3] {
+                    if knob(ui, &mut self.fx.p4, 0..=p.max, p.name).changed() {
+                        let v = self.fx.p4;
+                        self.send_param([0x00, FX_BASE_PAGE + p.page_offset, p.addr], v);
+                    }
+                }
+            });
         });
     }
 
     fn ui_delay_section(&mut self, ui: &mut egui::Ui) {
-        card(ui, |ui| {
-            ui.set_min_height(PANEL_MIN_H);
+        panel(ui, |ui| {
             let mut on = self.delay.on;
             if block_header(ui, "DELAY", &mut on) {
                 self.delay.on = on;
@@ -906,14 +960,18 @@ impl AppViews for ToneApp {
             }
             ui.add_space(10.0);
             ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 14.0;
+                ui.spacing_mut().item_spacing.x = 10.0;
                 if knob(ui, &mut self.delay.time, 0..=100, "TIME").changed() {
                     let v = self.delay.time;
                     self.send_param(ad::DLY1_TIME, v);
                 }
-                if knob(ui, &mut self.delay.feedback, 0..=100, "FEEDBACK").changed() {
+                if knob(ui, &mut self.delay.feedback, 0..=100, "F.BACK").changed() {
                     let v = self.delay.feedback;
                     self.send_param(ad::DLY1_FB, v);
+                }
+                if knob(ui, &mut self.delay.high_cut, 0..=100, "HI CUT").changed() {
+                    let v = self.delay.high_cut;
+                    self.send_param(ad::DLY1_HICUT, v);
                 }
                 if knob(ui, &mut self.delay.level, 0..=100, "LEVEL").changed() {
                     let v = self.delay.level;
@@ -924,8 +982,7 @@ impl AppViews for ToneApp {
     }
 
     fn ui_reverb_section(&mut self, ui: &mut egui::Ui) {
-        card(ui, |ui| {
-            ui.set_min_height(PANEL_MIN_H);
+        panel(ui, |ui| {
             let mut on = self.reverb.on;
             if block_header(ui, "REVERB", &mut on) {
                 self.reverb.on = on;
@@ -962,8 +1019,7 @@ impl AppViews for ToneApp {
     }
 
     fn ui_ns_section(&mut self, ui: &mut egui::Ui) {
-        card(ui, |ui| {
-            ui.set_min_height(PANEL_MIN_H);
+        panel(ui, |ui| {
             let mut on = self.ns.on;
             if block_header(ui, "NOISE SUPPRESSOR", &mut on) {
                 self.ns.on = on;

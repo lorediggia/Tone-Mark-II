@@ -14,8 +14,6 @@ pub mod col {
     pub const TEXT_DIM: Color32 = Color32::from_rgb(135, 135, 145);
     pub const TEXT_FAINT: Color32 = Color32::from_rgb(85, 85, 92);
     pub const OK: Color32 = Color32::from_rgb(70, 200, 130);
-    pub const WARN: Color32 = Color32::from_rgb(230, 180, 60);
-    pub const ERR: Color32 = Color32::from_rgb(220, 80, 80);
 
     static ACCENT_RGB: AtomicU32 = AtomicU32::new(0x00E87A26);
     static ACCENT_HI_RGB: AtomicU32 = AtomicU32::new(0x00FF963C);

@@ -55,7 +55,6 @@ pub struct AmpState {
     pub treble: u8,
     pub pres: u8,
     pub vol: u8,
-    pub bright: bool,
     pub sag: u8,
     pub res: u8,
 }
@@ -70,7 +69,6 @@ impl Default for AmpState {
             treble: 60,
             pres: 60,
             vol: 70,
-            bright: false,
             sag: 60,
             res: 60,
         }
@@ -106,8 +104,8 @@ pub struct DelayState {
     pub type_idx: usize,
     pub time: u8,
     pub feedback: u8,
+    pub high_cut: u8,
     pub level: u8,
-    pub e_level: u8,
 }
 
 impl Default for DelayState {
@@ -117,8 +115,8 @@ impl Default for DelayState {
             type_idx: 0,
             time: 50,
             feedback: 35,
+            high_cut: 100,
             level: 50,
-            e_level: 50,
         }
     }
 }
@@ -175,7 +173,5 @@ pub struct Snapshot {
 }
 
 pub struct PatchInfo {
-    pub name: String,
     pub memo: String,
-    pub block_count: usize,
 }

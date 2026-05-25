@@ -323,16 +323,19 @@ impl ToneApp {
                 "type": AMP_TYPES.get(self.amp.type_idx).copied().unwrap_or(""),
                 "gain": self.amp.gain, "bass": self.amp.bass, "mid": self.amp.mid,
                 "treble": self.amp.treble, "presence": self.amp.pres,
-                "volume": self.amp.vol, "bright": self.amp.bright,
+                "volume": self.amp.vol,
                 "sag": self.amp.sag, "resonance": self.amp.res,
             },
             "booster": { "on": self.booster.on, "type": BOOSTER_TYPES.get(self.booster.type_idx).copied().unwrap_or(""),
                          "drive": self.booster.p1, "bottom": self.booster.p2,
                          "tone": self.booster.p3, "level": self.booster.p4 },
-            "mod":     { "on": self.mod_fx.on, "type": MOD_TYPES.get(self.mod_fx.type_idx).copied().unwrap_or("") },
-            "fx":      { "on": self.fx.on, "type": FX_TYPES.get(self.fx.type_idx).copied().unwrap_or("") },
+            "mod":     { "on": self.mod_fx.on, "type": MOD_TYPES.get(self.mod_fx.type_idx).copied().unwrap_or(""),
+                         "p1": self.mod_fx.p1, "p2": self.mod_fx.p2, "p3": self.mod_fx.p3, "p4": self.mod_fx.p4 },
+            "fx":      { "on": self.fx.on, "type": FX_TYPES.get(self.fx.type_idx).copied().unwrap_or(""),
+                         "p1": self.fx.p1, "p2": self.fx.p2, "p3": self.fx.p3, "p4": self.fx.p4 },
             "delay":   { "on": self.delay.on, "type": DELAY_TYPES.get(self.delay.type_idx).copied().unwrap_or(""),
-                         "time": self.delay.time, "feedback": self.delay.feedback, "level": self.delay.level },
+                         "time": self.delay.time, "feedback": self.delay.feedback,
+                         "highCut": self.delay.high_cut, "level": self.delay.level },
             "reverb":  { "on": self.reverb.on, "type": REVERB_TYPES.get(self.reverb.type_idx).copied().unwrap_or(""),
                          "time": self.reverb.time, "preDelay": self.reverb.pre,
                          "density": self.reverb.density, "level": self.reverb.level },
@@ -382,22 +385,32 @@ impl ToneApp {
         let raw = fs::read_to_string(path).ok()?;
         let json: Value = serde_json::from_str(&raw).ok()?;
         let entry = &json["data"][0][0];
-        let name = entry["patchName"].as_str().unwrap_or("").trim().to_string();
         let memo = entry["memo"].as_str().unwrap_or("").trim().to_string();
-        let block_count = entry["paramSet"].as_object().map(|m| m.len()).unwrap_or(0);
-        let display_name = if name.is_empty() {
-            path.file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("?")
-                .to_string()
-        } else {
-            name
-        };
-        Some(PatchInfo {
-            name: display_name,
-            memo,
-            block_count,
-        })
+        Some(PatchInfo { memo })
+    }
+
+    pub fn resend_mod_params(&mut self) {
+        let idx = self.mod_fx.type_idx;
+        if let Some(row) = MAIN_PARAMS.get(idx) {
+            let values = [self.mod_fx.p1, self.mod_fx.p2, self.mod_fx.p3, self.mod_fx.p4];
+            for (i, slot) in row.iter().enumerate() {
+                if let Some(p) = slot {
+                    self.send_param([0x00, MOD_BASE_PAGE + p.page_offset, p.addr], values[i]);
+                }
+            }
+        }
+    }
+
+    pub fn resend_fx_params(&mut self) {
+        let idx = self.fx.type_idx;
+        if let Some(row) = MAIN_PARAMS.get(idx) {
+            let values = [self.fx.p1, self.fx.p2, self.fx.p3, self.fx.p4];
+            for (i, slot) in row.iter().enumerate() {
+                if let Some(p) = slot {
+                    self.send_param([0x00, FX_BASE_PAGE + p.page_offset, p.addr], values[i]);
+                }
+            }
+        }
     }
 
     pub fn resend_all(&mut self) {
@@ -414,7 +427,6 @@ impl ToneApp {
         self.send_param(ad::AMP_TREB, self.amp.treble);
         self.send_param(ad::AMP_PRES, self.amp.pres);
         self.send_param(ad::AMP_VOL, self.amp.vol);
-        self.send_param(ad::AMP_BRIGHT, self.amp.bright as u8);
         self.send_param(ad::AMP_SAG, self.amp.sag);
         self.send_param(ad::AMP_RES, self.amp.res);
 
@@ -436,12 +448,14 @@ impl ToneApp {
             ad::MOD_TYPE,
             MOD_TYPE_VALUES.get(self.mod_fx.type_idx).copied().unwrap_or(0),
         );
+        self.resend_mod_params();
 
         self.send_param(ad::FX_ON, self.fx.on as u8);
         self.send_param(
             ad::FX_TYPE,
             FX_TYPE_VALUES.get(self.fx.type_idx).copied().unwrap_or(0),
         );
+        self.resend_fx_params();
 
         self.send_param(ad::DLY1_ON, self.delay.on as u8);
         self.send_param(
@@ -453,6 +467,7 @@ impl ToneApp {
         );
         self.send_param(ad::DLY1_TIME, self.delay.time);
         self.send_param(ad::DLY1_FB, self.delay.feedback);
+        self.send_param(ad::DLY1_HICUT, self.delay.high_cut);
         self.send_param(ad::DLY1_LVL, self.delay.level);
 
         self.send_param(ad::REV_ON, self.reverb.on as u8);
@@ -476,12 +491,29 @@ impl ToneApp {
     fn render_top_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(
-                RichText::new("Tone Mark II")
-                    .size(26.0)
+                RichText::new("TONE")
+                    .size(22.0)
                     .strong()
-                    .extra_letter_spacing(2.0)
-                    .color(col::TEXT),
+                    .extra_letter_spacing(3.0)
+                    .color(col::accent()),
             );
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new("MARK II")
+                    .size(22.0)
+                    .strong()
+                    .extra_letter_spacing(3.0)
+                    .color(col::accent()),
+            );
+            ui.label(RichText::new("·").size(20.0).color(col::TEXT_FAINT));
+            ui.label(
+                RichText::new("BOSS KATANA STUDIO")
+                    .size(10.5)
+                    .extra_letter_spacing(3.0)
+                    .color(col::TEXT_DIM),
+            );
+            ui.add_space(28.0);
+
             let tabs = [
                 (AppTab::Library, "LIBRARY"),
                 (AppTab::Editor, "EDITOR"),

@@ -1,9 +1,9 @@
 [package]
-name = "tone-mark-2"
+name = "tone-mk2"
 version = "0.1.0"
 edition = "2021"
-description = "Tone Mark II"
-license = "GPLv3"
+description = "Tone Mark II — a BOSS Katana MkII Studio"
+license = "MIT"
 
 [dependencies]
 eframe = "0.27"
